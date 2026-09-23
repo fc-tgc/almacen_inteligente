@@ -4,6 +4,8 @@ use std::thread;
 use std::env;
 
 const CAPACIDAD_CINTA: usize = 10;
+const CANTIDAD_CAMIONES: usize = 2;
+const CANTIDAD_ROBOTS: usize = 3;
 
 struct Paquete {
     id: usize,
@@ -35,7 +37,7 @@ struct ZonaAlmacenamiento {
         let paquete = Paquete{id: guard.paquetes_procesados};
         let id_paquete = paquete.id;
         guard.buffer.push_back(paquete);
-        zona.hay_paquetes.notify_one();
+        zona.hay_paquetes.notify_all();
         drop(guard);
         println!("Camión {}: dejó paquete {}", id, id_paquete);
     }
@@ -49,9 +51,52 @@ struct ZonaAlmacenamiento {
             break;
         }
         let paquete = guard.buffer.pop_front().unwrap();
-        zona.cinta_llena.notify_one();
+        zona.cinta_llena.notify_all();
         drop(guard);
         println!("Robot {}: tomó paquete {}", id, paquete.id);
  
     }
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let cantidad_paquetes: usize = args[1]
+        .parse()
+        .expect("Debe pasar la cantidad de paquetes como argumento");
+
+    let estado_inicial = EstadoCinta {
+        buffer: VecDeque::new(),
+        paquetes_restantes: cantidad_paquetes,
+        paquetes_procesados: 0,
+    };
+
+    let zona = Arc::new(ZonaAlmacenamiento {
+        camiones: CANTIDAD_CAMIONES,
+        robots: CANTIDAD_ROBOTS,
+        hay_paquetes: Condvar::new(),
+        cinta_llena: Condvar::new(),
+        estado: Mutex::new(estado_inicial),
+    });
+
+    let mut handles = Vec::new();
+
+    for id in 0..zona.camiones {
+        let zona_clon = Arc::clone(&zona);
+        handles.push(thread::spawn(move || {
+            rol_camion(id, zona_clon);
+        }));
+    }
+
+    for id in 0..zona.robots {
+        let zona_clon = Arc::clone(&zona);
+        handles.push(thread::spawn(move || {
+            rol_robot(id, zona_clon);
+        }));
+    }
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    println!("Zona de Recepción: procesamiento finalizado.");
 }
