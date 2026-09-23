@@ -97,6 +97,4 @@ fn main() {
     for handle in handles {
         handle.join().unwrap();
     }
-
-    println!("Zona de Recepción: procesamiento finalizado.");
 }
