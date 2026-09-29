@@ -1,7 +1,6 @@
 use std::sync::{Arc, Mutex, Condvar};
 use std::collections::VecDeque;
 use std::thread;
-use std::env;
 
 const CAPACIDAD_CINTA: usize = 10;
 const CANTIDAD_CAMIONES: usize = 2;
