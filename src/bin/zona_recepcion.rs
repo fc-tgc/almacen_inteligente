@@ -7,25 +7,38 @@ const CAPACIDAD_CINTA: usize = 10;
 const CANTIDAD_CAMIONES: usize = 2;
 const CANTIDAD_ROBOTS: usize = 3;
 
+
+// Faltan un par de campos en caso que tenga que ser consistente con la parte 1 del TP.
+// Para la funcionlidad requerida no eran necesarios. Por lo tanto se optó por no incluirlos y simplificar. 
 struct Paquete {
     id: usize,
-    // faltan un par de campos en caso que tenga que ser consistente con la parte 1 del TP.
 }
 
+/// Estado mutable compartido de la zona de recepción, protegido en su
+/// totalidad por un único Mutex. Agrupar todo el estado relacionado
+/// (buffer + contadores) en un solo struct evita que distintas partes
+/// de ese estado se actualicen de forma no atómica entre sí.
 struct EstadoCinta { 
     buffer: VecDeque<Paquete>,
     paquetes_restantes: usize,
     paquetes_procesados: usize,
- }
+}
+
+/// Recursos compartidos entre todos los hilos de la Zona de Recepción.
+/// Las Condvar viven fuera del Mutex porque
+/// un hilo necesita poder tomar el lock primero y recién después esperar
+/// sobre la condición correspondiente pasándole el guard.
 struct ZonaAlmacenamiento { 
     camiones: usize,
     robots: usize,
     hay_paquetes: Condvar,
     cinta_llena: Condvar,
     estado: Mutex<EstadoCinta>,
- }
+}
 
- fn rol_camion(id: usize, zona: Arc<ZonaAlmacenamiento>) {
+/// Rol de un camión: mientras queden paquetes por producir, espera a que
+/// haya espacio libre en la cinta y deja un paquete.
+fn rol_camion(id: usize, zona: Arc<ZonaAlmacenamiento>) {
     loop {
         let mut guard = zona.estado.lock().unwrap();
         if guard.paquetes_restantes == 0 {
@@ -41,9 +54,11 @@ struct ZonaAlmacenamiento {
         drop(guard);
         println!("Camión {}: dejó paquete {}", id, id_paquete);
     }
- }
+}
 
- fn rol_robot(id: usize, zona: Arc<ZonaAlmacenamiento>) {
+/// Rol de un robot: mientras haya paquetes en la cinta o pueda llegar
+/// alguno más, espera y retira un paquete para procesarlo.
+fn rol_robot(id: usize, zona: Arc<ZonaAlmacenamiento>) {
     loop {
         let mut guard = zona.estado.lock().unwrap();
         guard = zona.hay_paquetes.wait_while(guard, |e| e.buffer.len() == 0 && e.paquetes_restantes != 0).unwrap();
@@ -59,6 +74,7 @@ struct ZonaAlmacenamiento {
 }
 
 fn main() {
+    // args()[1] es la cantidad total de paquetes a producir, pasada por línea de comandos.
     let args: Vec<String> = std::env::args().collect();
     let cantidad_paquetes: usize = args[1]
         .parse()
